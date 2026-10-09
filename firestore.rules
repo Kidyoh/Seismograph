@@ -1,0 +1,53 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function validLocation(d) {
+      return d.lat is number && d.lat >= -90 && d.lat <= 90
+          && d.lng is number && d.lng >= -180 && d.lng <= 180
+          && d.cell is string && d.cell.size() <= 16;
+    }
+
+    // One heartbeat document per phone. Only the Cloud Function reads them.
+    match /devices/{uid} {
+      allow create, update: if signedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['lat', 'lng', 'cell', 'listening', 'lastSeen'])
+          && validLocation(request.resource.data)
+          && request.resource.data.listening is bool
+          && request.resource.data.lastSeen == request.time;
+      allow read, delete: if false;
+    }
+
+    // Detections. Phones can add their own; nobody but the Cloud Function
+    // can read them, so individual phones' activity stays private.
+    match /triggers/{id} {
+      allow create: if signedIn()
+          && request.resource.data.keys().hasOnly([
+              'uid', 'clientTime', 'serverTime', 'lat', 'lng', 'cell',
+              'peak', 'ratio', 'freq', 'sustained', 'noise', 'test'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.clientTime is timestamp
+          && request.resource.data.serverTime == request.time
+          && validLocation(request.resource.data)
+          && request.resource.data.peak is number
+          && request.resource.data.peak >= 0 && request.resource.data.peak < 50
+          && request.resource.data.ratio is number
+          && request.resource.data.freq is number
+          && request.resource.data.sustained is number
+          && request.resource.data.noise is number
+          && request.resource.data.test is bool;
+      allow read, update, delete: if false;
+    }
+
+    // Confirmed tremors, written by the Cloud Function.
+    match /events/{id} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+  }
+}
