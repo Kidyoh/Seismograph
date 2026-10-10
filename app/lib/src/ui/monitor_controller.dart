@@ -29,7 +29,10 @@ class MonitorController extends ChangeNotifier {
 
   /// Null until we know; false when the app was built without Firebase.
   bool? networkAvailable;
-  Stream<List<QuakeEvent>>? events;
+
+  /// Confirmed events from the network, newest first. Null until loaded.
+  List<QuakeEvent>? events;
+  Object? eventsError;
 
   Future<void> init() async {
     settings = await MonitorSettings.load();
@@ -65,7 +68,19 @@ class MonitorController extends ChangeNotifier {
 
     final net = await Network.connect();
     networkAvailable = net != null;
-    if (net != null) events = Network.recentEvents();
+    if (net != null) {
+      _subs.add(Network.recentEvents().listen(
+        (e) {
+          events = e;
+          eventsError = null;
+          notifyListeners();
+        },
+        onError: (Object e) {
+          eventsError = e;
+          notifyListeners();
+        },
+      ));
+    }
     notifyListeners();
   }
 

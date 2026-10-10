@@ -32,14 +32,14 @@ double estimateMmi(double pgaMs2) {
   return mmi.clamp(1, 10).toDouble();
 }
 
-/// Short description of an MMI value.
+/// How an MMI value feels, e.g. "Light shaking".
 String describeMmi(double mmi) {
-  if (mmi < 2) return 'Not felt';
-  if (mmi < 3) return 'Weak';
-  if (mmi < 4) return 'Light';
-  if (mmi < 5) return 'Moderate';
-  if (mmi < 6) return 'Strong';
-  if (mmi < 7) return 'Very strong';
-  if (mmi < 8) return 'Severe';
-  return 'Violent';
+  if (mmi < 2) return 'Barely felt';
+  if (mmi < 3) return 'Weak shaking';
+  if (mmi < 4) return 'Light shaking';
+  if (mmi < 5) return 'Moderate shaking';
+  if (mmi < 6) return 'Strong shaking';
+  if (mmi < 7) return 'Very strong shaking';
+  if (mmi < 8) return 'Severe shaking';
+  return 'Violent shaking';
 }

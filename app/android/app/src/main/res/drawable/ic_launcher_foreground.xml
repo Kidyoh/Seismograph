@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A seismograph spike, centred in the adaptive icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M24,54 L36,54 L40,47 L44,61 L48,33 L54,77 L60,39 L64,63 L68,49 L72,55 L76,54 L84,54"
+        android:strokeColor="#40FFB347"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M24,54 L36,54 L40,47 L44,61 L48,33 L54,77 L60,39 L64,63 L68,49 L72,55 L76,54 L84,54"
+        android:strokeColor="#FFB347"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
