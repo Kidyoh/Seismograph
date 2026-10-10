@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../cloud/network.dart';
 import '../geo.dart';
+import '../models/activity.dart';
 import '../models/detection_record.dart';
 import '../models/quake_event.dart';
 import '../service/status.dart';
@@ -24,6 +25,9 @@ class MonitorController extends ChangeNotifier {
   MonitorStatus status = MonitorStatus.stopped;
   List<DetectionRecord> history = const [];
 
+  /// Per-minute vibration for the last night.
+  List<ActivityPoint> activity = const [];
+
   /// Last ten seconds of band-passed acceleration magnitude.
   final trace = TraceBuffer(500);
 
@@ -37,6 +41,7 @@ class MonitorController extends ChangeNotifier {
   Future<void> init() async {
     settings = await MonitorSettings.load();
     history = await DetectionLog.load();
+    activity = await ActivityLog.load();
     notifyListeners();
 
     _subs
@@ -49,6 +54,11 @@ class MonitorController extends ChangeNotifier {
         for (final v in (j?['v'] as List? ?? const [])) {
           trace.add((v as num).toDouble());
         }
+        notifyListeners();
+      }))
+      ..add(_service.on('activity').listen((j) {
+        if (j == null) return;
+        activity = ActivityLog.prune([...activity, ActivityPoint.fromJson(j)]);
         notifyListeners();
       }))
       ..add(_service.on('detection').listen((j) async {
@@ -176,7 +186,9 @@ class MonitorController extends ChangeNotifier {
 
   Future<void> clearHistory() async {
     await DetectionLog.clear();
+    await ActivityLog.clear();
     history = const [];
+    activity = const [];
     notifyListeners();
   }
 

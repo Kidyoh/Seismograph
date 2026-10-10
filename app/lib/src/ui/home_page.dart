@@ -6,11 +6,13 @@ import '../models/detection_record.dart';
 import '../models/quake_event.dart';
 import '../service/status.dart';
 import '../settings.dart';
+import 'charts/activity_chart.dart';
+import 'charts/live_trace_chart.dart';
+import 'charts/nights_chart.dart';
 import 'monitor_controller.dart';
 import 'pulse_dot.dart';
 import 'settings_page.dart';
 import 'theme.dart';
-import 'trace_view.dart';
 
 /// Only show confirmed events this close to home.
 const _nearbyKm = 300.0;
@@ -43,10 +45,17 @@ class HomePage extends StatelessWidget {
                 const SizedBox(height: 16),
                 _MonitoringToggle(controller: controller),
                 const SizedBox(height: 32),
+                const _SectionLabel('TONIGHT'),
+                _TonightCard(controller: controller),
+                const SizedBox(height: 32),
                 const _SectionLabel('CONFIRMED NEAR YOU'),
                 _NetworkEvents(controller: controller),
                 const SizedBox(height: 32),
                 const _SectionLabel('THIS PHONE'),
+                if (controller.history.isNotEmpty) ...[
+                  _NightsCard(history: controller.history),
+                  const SizedBox(height: 10),
+                ],
                 _LocalHistory(history: controller.history),
               ],
             ),
@@ -160,10 +169,10 @@ class _Hero extends StatelessWidget {
         Row(
           children: [
             PulseDot(color: view.color, pulsing: view.pulsing),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             Text(
               view.title,
-              style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w500, height: 1.1, letterSpacing: -0.5),
+              style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w500, height: 1.1, letterSpacing: -0.4),
             ),
             if (warming) ...[
               const Spacer(),
@@ -173,7 +182,7 @@ class _Hero extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Padding(
-          padding: const EdgeInsets.only(left: 30),
+          padding: const EdgeInsets.only(left: 22),
           child: Text(view.subtitle, style: const TextStyle(fontSize: 15, color: Palette.muted)),
         ),
         if (warming) ...[
@@ -203,44 +212,148 @@ class _TracePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final listening = controller.status.listening;
     final shaking = controller.status.detectorState == DetectorState.capturing;
-    return Container(
-      height: 200,
-      decoration: BoxDecoration(
-        color: Palette.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Palette.outline),
-        boxShadow: listening
-            ? [BoxShadow(color: view.color.withValues(alpha: 0.08), blurRadius: 40, spreadRadius: 2)]
-            : null,
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: TraceView(
-              trace: controller.trace,
-              active: listening,
-              color: shaking ? Palette.red : Palette.amber,
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 14, 14, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 6, bottom: 8),
+              child: Row(
+                children: [
+                  Text('GROUND MOTION', style: labelStyle.copyWith(fontSize: 10)),
+                  const Spacer(),
+                  Text('m/s²', style: labelStyle.copyWith(fontSize: 10, letterSpacing: 0.5, color: Palette.faint)),
+                ],
+              ),
             ),
-          ),
-          if (!listening && view.idleHint != null)
-            Center(
-              child: Text(view.idleHint!, style: labelStyle.copyWith(fontSize: 12, color: Palette.faint)),
+            SizedBox(
+              height: 170,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: LiveTraceChart(
+                      trace: controller.trace,
+                      active: listening,
+                      color: shaking ? Palette.red : Palette.amber,
+                    ),
+                  ),
+                  if (!listening && view.idleHint != null)
+                    Positioned.fill(
+                      left: 40,
+                      bottom: 24,
+                      child: Center(
+                        child: Text(view.idleHint!, style: const TextStyle(fontSize: 13, color: Palette.faint)),
+                      ),
+                    ),
+                ],
+              ),
             ),
-          const Positioned(
-            left: 12,
-            bottom: 8,
-            child: Text('−10 s', style: TextStyle(fontFamily: mono, fontSize: 10, color: Palette.faint)),
-          ),
-          const Positioned(
-            right: 12,
-            bottom: 8,
-            child: Text('now', style: TextStyle(fontFamily: mono, fontSize: 10, color: Palette.faint)),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
+}
+
+class _TonightCard extends StatelessWidget {
+  const _TonightCard({required this.controller});
+
+  final MonitorController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final points = controller.activity;
+    if (points.length < 2) {
+      return const _EmptyCard(
+        icon: Icons.show_chart_rounded,
+        title: 'No data yet tonight',
+        subtitle: 'A minute-by-minute chart appears after a few minutes of listening.',
+      );
+    }
+    final since = points.first.time;
+    final detections = [
+      for (final r in controller.history)
+        if (!r.onset.isBefore(since)) r.onset,
+    ];
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 14, 14, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(left: 6, bottom: 8),
+              child: Wrap(
+                spacing: 16,
+                children: [
+                  _Legend(color: Palette.amber, label: 'Background (RMS, m/s²)'),
+                  _Legend(color: Palette.red, label: 'Detection', rule: true),
+                ],
+              ),
+            ),
+            SizedBox(height: 150, child: ActivityChart(points: points, detections: detections)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NightsCard extends StatelessWidget {
+  const _NightsCard({required this.history});
+
+  final List<DetectionRecord> history;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 14, 14, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 6, bottom: 8),
+                child: Row(
+                  children: [
+                    Text('LAST 14 NIGHTS', style: labelStyle.copyWith(fontSize: 10)),
+                    const Spacer(),
+                    const _Legend(color: Palette.amber, label: 'Real'),
+                    const SizedBox(width: 12),
+                    _Legend(color: Palette.teal.withValues(alpha: 0.55), label: 'Test'),
+                  ],
+                ),
+              ),
+              SizedBox(height: 120, child: NightsChart(history: history)),
+            ],
+          ),
+        ),
+      );
+}
+
+class _Legend extends StatelessWidget {
+  const _Legend({required this.color, required this.label, this.rule = false});
+
+  final Color color;
+  final String label;
+
+  /// Draw a vertical rule instead of a swatch.
+  final bool rule;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: rule ? 1.5 : 10,
+            height: rule ? 10 : 2,
+            color: color,
+          ),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(fontSize: 11, color: Palette.muted)),
+        ],
+      );
 }
 
 class _Readouts extends StatelessWidget {
@@ -350,25 +463,21 @@ class _Chip extends StatelessWidget {
   final bool on;
 
   @override
-  Widget build(BuildContext context) {
-    final c = on ? Palette.amber : Palette.muted;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: on ? const Color(0xFF221808) : Palette.surface,
-        borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: on ? Palette.amberDim : Palette.outline),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: c),
-          const SizedBox(width: 6),
-          Text(text, style: TextStyle(fontSize: 12.5, color: c, fontWeight: FontWeight.w500)),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(100),
+          border: Border.all(color: Palette.outline),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: on ? Palette.amber : Palette.faint),
+            const SizedBox(width: 6),
+            Text(text, style: TextStyle(fontSize: 12.5, color: on ? Palette.text : Palette.muted)),
+          ],
+        ),
+      );
 }
 
 class _MonitoringToggle extends StatelessWidget {
@@ -380,13 +489,8 @@ class _MonitoringToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = controller.settings;
     final on = settings.enabled;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      decoration: BoxDecoration(
-        color: on ? const Color(0xFF1A1307) : Palette.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: on ? Palette.amberDim : Palette.outline),
-      ),
+    return Card(
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
         onTap: () => _toggle(context, !on),
@@ -555,9 +659,7 @@ class _EventTile extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: c.withValues(alpha: 0.12),
-              border: Border.all(color: c.withValues(alpha: 0.6)),
-              boxShadow: [BoxShadow(color: c.withValues(alpha: 0.25), blurRadius: 14)],
+              border: Border.all(color: c.withValues(alpha: 0.5)),
             ),
             child: Text(
               e.mmi.toStringAsFixed(0),
@@ -640,13 +742,9 @@ class _TimelineRow extends StatelessWidget {
               children: [
                 Expanded(child: Container(width: 1, color: first ? Colors.transparent : Palette.outline)),
                 Container(
-                  width: 9,
-                  height: 9,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: dot,
-                    boxShadow: [BoxShadow(color: dot.withValues(alpha: 0.5), blurRadius: 8)],
-                  ),
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: dot),
                 ),
                 Expanded(child: Container(width: 1, color: last ? Colors.transparent : Palette.outline)),
               ],

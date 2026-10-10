@@ -9,6 +9,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 
 import '../cloud/network.dart';
 import '../detection/detector.dart';
+import '../models/activity.dart';
 import '../models/detection_record.dart';
 import '../settings.dart';
 import 'status.dart';
@@ -78,6 +79,12 @@ class _Monitor {
   DateTime _uiWatchedAt = DateTime.fromMillisecondsSinceEpoch(0);
   final _trace = <double>[];
   DateTime _lastStatusPush = DateTime.fromMillisecondsSinceEpoch(0);
+
+  // Per-minute vibration summary for the "tonight" chart.
+  int? _minute;
+  double _minuteEnergy = 0;
+  double _minutePeak = 0;
+  int _minuteSamples = 0;
 
   // Synthetic shaking for testing the full pipeline.
   int? _simStartMs;
@@ -175,6 +182,7 @@ class _Monitor {
   }
 
   void _stopListening() {
+    _flushMinute();
     _sensor?.cancel();
     _sensor = null;
     _listeningSince = null;
@@ -200,6 +208,8 @@ class _Monitor {
       case null:
         break;
     }
+
+    _recordActivity(t);
 
     if (_detector.state != _shownState) {
       _shownState = _detector.state;
@@ -228,6 +238,34 @@ class _Monitor {
       _rateHz = measured;
       _detector.reconfigure(_detectorConfig);
     }
+  }
+
+  void _recordActivity(int t) {
+    // Skip calibration: the filters are still settling.
+    if (_detector.state == DetectorState.warmingUp) return;
+    final minute = t ~/ 60000;
+    if (_minute != null && minute != _minute) _flushMinute();
+    _minute = minute;
+    final m = _detector.lastMagnitude;
+    _minuteEnergy += m * m;
+    _minutePeak = math.max(_minutePeak, m);
+    _minuteSamples++;
+  }
+
+  void _flushMinute() {
+    final minute = _minute;
+    if (minute != null && _minuteSamples > 0) {
+      final point = ActivityPoint(
+        DateTime.fromMillisecondsSinceEpoch(minute * 60000),
+        math.sqrt(_minuteEnergy / _minuteSamples),
+        _minutePeak,
+      );
+      ActivityLog.add(point);
+      service.invoke('activity', point.toJson());
+    }
+    _minute = null;
+    _minuteEnergy = _minutePeak = 0;
+    _minuteSamples = 0;
   }
 
   bool get _uiIsWatching =>

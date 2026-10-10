@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// A status light that sends out a slow ring while active.
+/// A small status light that breathes slowly while active.
 class PulseDot extends StatefulWidget {
-  const PulseDot({super.key, required this.color, required this.pulsing, this.size = 16});
+  const PulseDot({super.key, required this.color, required this.pulsing, this.size = 10});
 
   final Color color;
   final bool pulsing;
@@ -13,7 +13,7 @@ class PulseDot extends StatefulWidget {
 }
 
 class _PulseDotState extends State<PulseDot> with SingleTickerProviderStateMixin {
-  late final _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 2200));
+  late final _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 2400));
 
   @override
   void initState() {
@@ -29,10 +29,10 @@ class _PulseDotState extends State<PulseDot> with SingleTickerProviderStateMixin
 
   void _sync() {
     if (widget.pulsing && !_controller.isAnimating) {
-      _controller.repeat();
+      _controller.repeat(reverse: true);
     } else if (!widget.pulsing && _controller.isAnimating) {
       _controller.stop();
-      _controller.value = 0;
+      _controller.value = 1;
     }
   }
 
@@ -43,44 +43,14 @@ class _PulseDotState extends State<PulseDot> with SingleTickerProviderStateMixin
   }
 
   @override
-  Widget build(BuildContext context) {
-    final s = widget.size;
-    return SizedBox(
-      width: s,
-      height: s,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          final t = Curves.easeOut.transform(_controller.value);
-          return Stack(
-            alignment: Alignment.center,
-            clipBehavior: Clip.none,
-            children: [
-              if (widget.pulsing)
-                Container(
-                  width: s * (1 + 1.6 * t),
-                  height: s * (1 + 1.6 * t),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: widget.color.withValues(alpha: 0.6 * (1 - t)), width: 1.5),
-                  ),
-                ),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 400),
-                width: s,
-                height: s,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: widget.color,
-                  boxShadow: widget.pulsing
-                      ? [BoxShadow(color: widget.color.withValues(alpha: 0.55), blurRadius: 12, spreadRadius: 1)]
-                      : null,
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
+  Widget build(BuildContext context) => FadeTransition(
+        opacity: widget.pulsing
+            ? Tween(begin: 0.35, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut))
+            : const AlwaysStoppedAnimation(1),
+        child: Container(
+          width: widget.size,
+          height: widget.size,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: widget.color),
+        ),
+      );
 }
