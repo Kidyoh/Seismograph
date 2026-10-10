@@ -87,9 +87,17 @@ class _StatusView {
             Palette.muted,
             idleHint: 'Plug in to start',
           ),
+        GateStatus.lowBattery => const _StatusView(
+            'Paused',
+            'Battery below $minBatteryPercent%. Plug in to keep listening.',
+            Palette.muted,
+            idleHint: 'Battery low',
+          ),
         GateStatus.outsideHours => _StatusView(
             'Resting',
-            'Starts at ${_hour(settings.startHour)} while charging',
+            settings.requireCharger
+                ? 'Starts at ${_hour(settings.startHour)} while charging'
+                : 'Starts at ${_hour(settings.startHour)}',
             Palette.muted,
             idleHint: 'Back at ${_hour(settings.startHour)}',
           ),
@@ -441,8 +449,12 @@ class _Conditions extends StatelessWidget {
       children: [
         _Chip(
           icon: s.pluggedIn ? Icons.bolt_rounded : Icons.battery_std_rounded,
-          text: settings.enabled ? (s.pluggedIn ? 'Charging' : 'On battery') : 'Needs charger',
-          on: s.pluggedIn,
+          text: s.pluggedIn
+              ? 'Charging'
+              : settings.requireCharger
+                  ? 'Needs charger'
+                  : 'On battery',
+          on: s.pluggedIn || (!settings.requireCharger && s.gate != GateStatus.lowBattery),
         ),
         _Chip(
           icon: Icons.bedtime_rounded,
@@ -509,7 +521,9 @@ class _MonitoringToggle extends StatelessWidget {
                     Text(
                       on
                           ? 'Leave it flat on a nightstand, not on the bed'
-                          : 'Listens only while charging, so no battery cost',
+                          : settings.requireCharger
+                              ? 'Listens only while charging, so no battery cost'
+                              : 'Listens on battery too, until $minBatteryPercent% is left',
                       style: const TextStyle(fontSize: 13, color: Palette.muted),
                     ),
                   ],

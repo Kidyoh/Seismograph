@@ -20,6 +20,9 @@ firestore.rules, firestore.indexes.json, firebase.json
 1. **Gate.** A foreground service stays idle until the phone is plugged in
    and, by default, inside the night window (22:00–07:00). Doze never kicks in
    while charging, so the service can sample all night without battery cost.
+   Turning off **Only while charging** lets it listen on battery too: it asks
+   for a battery-optimization exemption so Android keeps the sensor running,
+   and it pauses below 20 % charge.
 2. **Detector** (`app/lib/src/detection/detector.dart`), at 50 Hz:
    - band-passes each axis to 0.5–15 Hz, which drops gravity and slow tilt;
    - runs a classic **STA/LTA** trigger (1 s short-term over 30 s long-term

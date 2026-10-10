@@ -36,6 +36,22 @@ void main() {
       expect(evaluateGate(settings: on, pluggedIn: false, now: night), GateStatus.notCharging);
     });
 
+    test('can listen on battery until it runs low', () {
+      final battery = on.copyWith(requireCharger: false);
+      expect(evaluateGate(settings: battery, pluggedIn: false, now: night), GateStatus.open);
+      expect(
+        evaluateGate(settings: battery, pluggedIn: false, now: night, batteryPercent: 19),
+        GateStatus.lowBattery,
+      );
+      // Low charge doesn't matter once it's plugged in.
+      expect(
+        evaluateGate(settings: battery, pluggedIn: true, now: night, batteryPercent: 5),
+        GateStatus.open,
+      );
+      // Still respects the night window.
+      expect(evaluateGate(settings: battery, pluggedIn: false, now: noon), GateStatus.outsideHours);
+    });
+
     test('respects the night window only when asked', () {
       expect(evaluateGate(settings: on, pluggedIn: true, now: noon), GateStatus.outsideHours);
       expect(

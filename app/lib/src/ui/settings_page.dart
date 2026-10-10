@@ -59,8 +59,23 @@ class SettingsPage extends StatelessWidget {
                 label: 'SCHEDULE',
                 children: [
                   SwitchListTile(
+                    title: const Text('Only while charging'),
+                    subtitle: Text(
+                      s.requireCharger
+                          ? 'No battery cost. Turn off to also listen on battery.'
+                          : 'Also listens on battery and pauses at $minBatteryPercent%. '
+                              'Uses extra battery overnight.',
+                    ),
+                    value: s.requireCharger,
+                    onChanged: controller.setRequireCharger,
+                  ),
+                  SwitchListTile(
                     title: const Text('Only at night'),
-                    subtitle: const Text('Otherwise listens any time the phone is charging.'),
+                    subtitle: Text(
+                      s.requireCharger
+                          ? 'Otherwise listens any time the phone is charging.'
+                          : 'Otherwise listens all day.',
+                    ),
                     value: s.nightOnly,
                     onChanged: (v) => controller.update(s.copyWith(nightOnly: v)),
                   ),

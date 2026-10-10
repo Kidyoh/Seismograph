@@ -25,6 +25,7 @@ class MonitorSettings {
     this.enabled = false,
     this.sensitivity = Sensitivity.medium,
     this.nightOnly = true,
+    this.requireCharger = true,
     this.startHour = 22,
     this.endHour = 7,
     this.shareWithNetwork = true,
@@ -37,6 +38,10 @@ class MonitorSettings {
   final bool enabled;
   final Sensitivity sensitivity;
   final bool nightOnly;
+
+  /// Only listen while plugged in. When false the app also listens on
+  /// battery, down to [minBatteryPercent].
+  final bool requireCharger;
 
   /// Night window in local hours, [startHour] inclusive to [endHour]
   /// exclusive. May wrap past midnight.
@@ -54,6 +59,7 @@ class MonitorSettings {
     bool? enabled,
     Sensitivity? sensitivity,
     bool? nightOnly,
+    bool? requireCharger,
     int? startHour,
     int? endHour,
     bool? shareWithNetwork,
@@ -64,6 +70,7 @@ class MonitorSettings {
         enabled: enabled ?? this.enabled,
         sensitivity: sensitivity ?? this.sensitivity,
         nightOnly: nightOnly ?? this.nightOnly,
+        requireCharger: requireCharger ?? this.requireCharger,
         startHour: startHour ?? this.startHour,
         endHour: endHour ?? this.endHour,
         shareWithNetwork: shareWithNetwork ?? this.shareWithNetwork,
@@ -74,6 +81,7 @@ class MonitorSettings {
   static const _kEnabled = 'enabled';
   static const _kSensitivity = 'sensitivity';
   static const _kNightOnly = 'nightOnly';
+  static const _kRequireCharger = 'requireCharger';
   static const _kStartHour = 'startHour';
   static const _kEndHour = 'endHour';
   static const _kShare = 'shareWithNetwork';
@@ -91,6 +99,7 @@ class MonitorSettings {
         orElse: () => d.sensitivity,
       ),
       nightOnly: await p.getBool(_kNightOnly) ?? d.nightOnly,
+      requireCharger: await p.getBool(_kRequireCharger) ?? d.requireCharger,
       startHour: await p.getInt(_kStartHour) ?? d.startHour,
       endHour: await p.getInt(_kEndHour) ?? d.endHour,
       shareWithNetwork: await p.getBool(_kShare) ?? d.shareWithNetwork,
@@ -104,6 +113,7 @@ class MonitorSettings {
     await p.setBool(_kEnabled, enabled);
     await p.setString(_kSensitivity, sensitivity.name);
     await p.setBool(_kNightOnly, nightOnly);
+    await p.setBool(_kRequireCharger, requireCharger);
     await p.setInt(_kStartHour, startHour);
     await p.setInt(_kEndHour, endHour);
     await p.setBool(_kShare, shareWithNetwork);
@@ -118,6 +128,7 @@ class MonitorSettings {
 enum GateStatus {
   disabled('Monitoring is off'),
   notCharging('Waiting for charger'),
+  lowBattery('Paused: battery low'),
   outsideHours('Waiting for night window'),
   open('Listening');
 
@@ -125,14 +136,22 @@ enum GateStatus {
   final String label;
 }
 
+/// On battery, stop listening below this charge so the phone still has
+/// plenty left in the morning.
+const minBatteryPercent = 20;
+
 /// Decides whether the accelerometer should run.
 GateStatus evaluateGate({
   required MonitorSettings settings,
   required bool pluggedIn,
   required DateTime now,
+  int batteryPercent = 100,
 }) {
   if (!settings.enabled) return GateStatus.disabled;
-  if (!pluggedIn) return GateStatus.notCharging;
+  if (!pluggedIn) {
+    if (settings.requireCharger) return GateStatus.notCharging;
+    if (batteryPercent < minBatteryPercent) return GateStatus.lowBattery;
+  }
   if (settings.nightOnly &&
       !isWithinHours(now.hour, settings.startHour, settings.endHour)) {
     return GateStatus.outsideHours;

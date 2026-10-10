@@ -55,6 +55,7 @@ class _Monitor {
   MonitorSettings _settings = const MonitorSettings();
   Network? _network;
   bool _pluggedIn = false;
+  int _batteryPercent = 100;
   GateStatus _gate = GateStatus.disabled;
 
   StreamSubscription<AccelerometerEvent>? _sensor;
@@ -107,21 +108,34 @@ class _Monitor {
         _pushStatus(force: true);
       }))
       ..add(service.on('simulate').listen((_) => _simulate()))
-      ..add(_battery.onBatteryStateChanged.listen((s) {
+      ..add(_battery.onBatteryStateChanged.listen((s) async {
         _pluggedIn = _isPluggedIn(s);
+        await _readBatteryLevel();
         _evaluate();
       }));
 
     _pluggedIn = _isPluggedIn(await _battery.batteryState);
+    await _readBatteryLevel();
     if (_settings.shareWithNetwork) _network = await Network.connect();
 
-    // Re-check the night window and send heartbeats.
-    _ticker = Timer.periodic(const Duration(minutes: 1), (_) => _evaluate());
+    // Re-check the night window and battery, and send heartbeats.
+    _ticker = Timer.periodic(const Duration(minutes: 1), (_) async {
+      if (!_pluggedIn) await _readBatteryLevel();
+      _evaluate();
+    });
     _evaluate();
   }
 
   DetectorConfig get _detectorConfig => _settings.sensitivity
       .apply(const DetectorConfig().copyWith(sampleRateHz: _rateHz));
+
+  Future<void> _readBatteryLevel() async {
+    try {
+      _batteryPercent = await _battery.batteryLevel;
+    } catch (e) {
+      debugPrint('Battery level unavailable: $e');
+    }
+  }
 
   static bool _isPluggedIn(BatteryState s) =>
       s == BatteryState.charging ||
@@ -149,6 +163,7 @@ class _Monitor {
       settings: _settings,
       pluggedIn: _pluggedIn,
       now: DateTime.now(),
+      batteryPercent: _batteryPercent,
     );
     final shouldListen = _gate == GateStatus.open;
 

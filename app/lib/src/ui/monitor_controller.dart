@@ -182,6 +182,14 @@ class MonitorController extends ChangeNotifier {
     }
   }
 
+  /// Switches between charger-only and battery listening. Listening on
+  /// battery needs the battery-optimization exemption so Android doesn't
+  /// pause the sensor once the screen is off.
+  Future<void> setRequireCharger(bool require) async {
+    if (!require) await Permission.ignoreBatteryOptimizations.request();
+    await update(settings.copyWith(requireCharger: require));
+  }
+
   void simulate() => _service.invoke('simulate');
 
   Future<void> clearHistory() async {
