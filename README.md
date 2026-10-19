@@ -74,12 +74,15 @@ local history all work, and the network section explains what's missing.
 2. Add an Android app with package `io.github.kidyoh.seismograph`, download
    `google-services.json`, and put it in `app/android/app/`. It's gitignored,
    and the Google Services Gradle plugin is applied only when the file exists.
-3. Deploy the rules, indexes and function:
+3. Deploy the rules, indexes and TTL policies, and the function:
    ```sh
    firebase use --add
    cd functions && npm install && cd ..
    firebase deploy --only firestore,functions
    ```
+   The TTL policies on `devices.expireAt` and `triggers.expireAt` come from
+   `fieldOverrides` in `firestore.indexes.json`, and can take a while to
+   become active.
 4. `cd app && flutter run`
 
 ### Trying it without an earthquake
@@ -100,12 +103,30 @@ cd functions && npm test      # clustering and decision logic
 
 ## Privacy
 
-- Anonymous auth only. No account, no name.
+- Anonymous auth only. No account, no name. The app signs in anonymously
+  whenever Firebase is configured, even with **Share detections** off, so it
+  can show confirmed events. With sharing off it uploads nothing, apart from
+  one last heartbeat when you switch sharing off that marks the phone as no
+  longer listening.
 - Coarse location permission only, rounded again to two decimals (about 1 km)
   before it's stored or sent.
-- Location comes from the app when you open it, never from the background
-  service.
-- Detections are write-only for clients. Phones only see confirmed events.
+- The location is fetched only when you turn monitoring on without one set,
+  or tap **Update** in Settings. The background service never asks for it.
+- Phones can't read each other's detections or heartbeats; they only see
+  confirmed events, which hold an averaged location and phone counts but no
+  phone ids.
+- **Retention.** Every heartbeat and detection carries an `expireAt` time,
+  and Firestore TTL policies delete them after it: a phone's heartbeat 7 days
+  after its latest one, a detection 30 days after it happened. The rules
+  reject uploads without an expiry or with one further out than that (plus a
+  day for clock skew). TTL deletion usually happens within a day of expiry.
+  Confirmed events are kept.
+- **Deleting your data.** Settings → **Delete my uploaded data** deletes this
+  phone's heartbeat and every detection it uploaded. The rules let a phone
+  read and delete only documents under its own anonymous id. Turn off
+  **Share detections** first if you don't want new data uploaded afterwards.
+  The id lives on the phone, so after uninstalling or clearing app data your
+  old uploads can't be deleted from the app; they expire as above.
 
 ## Limitations and next steps
 

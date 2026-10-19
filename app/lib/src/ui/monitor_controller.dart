@@ -33,6 +33,10 @@ class MonitorController extends ChangeNotifier {
 
   /// Null until we know; false when the app was built without Firebase.
   bool? networkAvailable;
+  Network? _network;
+
+  /// True while [deleteUploadedData] runs.
+  bool deletingUploads = false;
 
   /// Confirmed events from the network, newest first. Null until loaded.
   List<QuakeEvent>? events;
@@ -76,7 +80,7 @@ class MonitorController extends ChangeNotifier {
       await _service.startService();
     }
 
-    final net = await Network.connect();
+    final net = _network = await Network.connect();
     networkAvailable = net != null;
     if (net != null) {
       _subs.add(Network.recentEvents().listen(
@@ -188,6 +192,29 @@ class MonitorController extends ChangeNotifier {
   Future<void> setRequireCharger(bool require) async {
     if (!require) await Permission.ignoreBatteryOptimizations.request();
     await update(settings.copyWith(requireCharger: require));
+  }
+
+  /// Deletes this phone's heartbeat and every detection it uploaded.
+  /// Returns a message for the user.
+  Future<String> deleteUploadedData() async {
+    final net = _network;
+    if (net == null) return 'Not connected to the network.';
+    deletingUploads = true;
+    notifyListeners();
+    try {
+      final n = await net.deleteMyData();
+      final what = n == 1 ? '1 detection' : '$n detections';
+      return settings.shareWithNetwork
+          ? 'Deleted $what and this phone\'s heartbeat. Sharing is still on, '
+              'so new ones will be uploaded.'
+          : 'Deleted $what and this phone\'s heartbeat.';
+    } catch (e) {
+      debugPrint('Deleting uploaded data failed: $e');
+      return 'Could not delete everything. Check the connection and try again.';
+    } finally {
+      deletingUploads = false;
+      notifyListeners();
+    }
   }
 
   void simulate() => _service.invoke('simulate');
