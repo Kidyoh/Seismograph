@@ -131,6 +131,30 @@ class SettingsPage extends StatelessWidget {
                       child: const Text('Update'),
                     ),
                   ),
+                  ListTile(
+                    title: const Text('Delete my uploaded data'),
+                    subtitle: Text(
+                      controller.networkAvailable == true
+                          ? 'Uploads expire on their own: detections after 30 days, '
+                              'the heartbeat 7 days after the last one.'
+                          : 'Not connected to the network.',
+                    ),
+                    trailing: controller.deletingUploads
+                        ? const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 12),
+                            child: SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : TextButton(
+                            style: TextButton.styleFrom(foregroundColor: Palette.red),
+                            onPressed: controller.networkAvailable == true
+                                ? () => _deleteUploads(context, shareOn: s.shareWithNetwork)
+                                : null,
+                            child: const Text('Delete'),
+                          ),
+                  ),
                 ],
               ),
               _Group(
@@ -174,6 +198,40 @@ class SettingsPage extends StatelessWidget {
         );
       },
     );
+  }
+
+  Future<void> _deleteUploads(BuildContext context, {required bool shareOn}) async {
+    const stillSharing = '\n\nShare detections is on, so new detections and heartbeats '
+        'will be uploaded again. Turn it off first to stop sharing.';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Palette.surfaceHigh,
+        title: const Text('Delete uploaded data?'),
+        content: Text(
+          'This removes every detection this phone has shared, and its '
+          'heartbeat, from the network. History on this phone is kept. '
+          'Confirmed events don\'t identify phones and stay.'
+          '${shareOn ? stillSharing : ''}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Palette.red),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final message = await controller.deleteUploadedData();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 }
 

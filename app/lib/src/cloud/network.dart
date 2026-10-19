@@ -18,11 +18,29 @@ import '../models/quake_event.dart';
 ///  * `triggers/{auto}`: one document per local detection.
 ///
 /// A Cloud Function correlates triggers and writes confirmed `events`.
+///
+/// Both kinds of document carry an `expireAt` time, and a Firestore TTL
+/// policy deletes them after it passes. The phone can also delete them all
+/// itself with [deleteMyData].
 class Network {
   Network._(this._db, this.uid);
 
   final FirebaseFirestore _db;
   final String uid;
+
+  /// How long a heartbeat is kept after the latest one. Each heartbeat
+  /// pushes it back, so a phone that stops sharing drops out after this.
+  /// `firestore.rules` allows up to a day more for clock skew.
+  static const deviceRetention = Duration(days: 7);
+
+  /// How long a detection is kept after its onset. The backend only needs
+  /// minutes; the rest is for checking the network's behaviour.
+  /// `firestore.rules` allows up to a day more for clock skew.
+  static const triggerRetention = Duration(days: 30);
+
+  /// Firestore allows 500 writes per batch.
+  static const _deleteBatchSize = 400;
+  static const _deleteTimeout = Duration(seconds: 30);
 
   static Future<bool>? _init;
 
@@ -63,6 +81,7 @@ class Network {
         'cell': regionCell(lat, lng),
         'listening': listening,
         'lastSeen': FieldValue.serverTimestamp(),
+        'expireAt': Timestamp.fromDate(DateTime.now().add(deviceRetention)),
       });
 
   /// Writes a trigger. Firestore queues it if the phone is offline.
@@ -85,7 +104,35 @@ class Network {
         'sustained': d.sustainedSeconds,
         'noise': d.noiseRms,
         'test': simulated,
+        'expireAt': Timestamp.fromDate(d.onset.add(triggerRetention)),
       });
+
+  /// Deletes everything this phone has uploaded: all of its triggers, then
+  /// its heartbeat. Returns how many triggers were deleted.
+  ///
+  /// Reads from the server only, so it throws instead of reporting success
+  /// from the cache when the phone is offline. Firestore queues a write that
+  /// timed out and retries it, so a retry after an error is safe.
+  Future<int> deleteMyData() async {
+    var deleted = 0;
+    while (true) {
+      final page = await _db
+          .collection('triggers')
+          .where('uid', isEqualTo: uid)
+          .limit(_deleteBatchSize)
+          .get(const GetOptions(source: Source.server))
+          .timeout(_deleteTimeout);
+      if (page.docs.isEmpty) break;
+      final batch = _db.batch();
+      for (final doc in page.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit().timeout(_deleteTimeout);
+      deleted += page.docs.length;
+    }
+    await _db.collection('devices').doc(uid).delete().timeout(_deleteTimeout);
+    return deleted;
+  }
 
   /// Confirmed events from the last [days] days, newest first.
   ///

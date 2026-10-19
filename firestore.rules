@@ -13,23 +13,36 @@ service cloud.firestore {
           && d.cell is string && d.cell.size() <= 16;
     }
 
-    // One heartbeat document per phone. Only the Cloud Function reads them.
-    match /devices/{uid} {
-      allow create, update: if signedIn() && request.auth.uid == uid
-          && request.resource.data.keys().hasOnly(['lat', 'lng', 'cell', 'listening', 'lastSeen'])
-          && validLocation(request.resource.data)
-          && request.resource.data.listening is bool
-          && request.resource.data.lastSeen == request.time;
-      allow read, delete: if false;
+    // A TTL policy deletes documents once `expireAt` passes. The app sets
+    // it 7 days ahead for heartbeats and 30 days after onset for triggers
+    // (see Network in app/lib/src/cloud/network.dart). Allow a day of
+    // clock skew, but nothing that would keep data around much longer.
+    function validExpiry(d, days) {
+      return d.expireAt is timestamp
+          && d.expireAt > request.time
+          && d.expireAt <= request.time + duration.value(days + 1, 'd');
     }
 
-    // Detections. Phones can add their own; nobody but the Cloud Function
-    // can read them, so individual phones' activity stays private.
+    // One heartbeat document per phone. Only the Cloud Function reads them;
+    // the phone can delete its own.
+    match /devices/{uid} {
+      allow create, update: if signedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['lat', 'lng', 'cell', 'listening', 'lastSeen', 'expireAt'])
+          && validLocation(request.resource.data)
+          && request.resource.data.listening is bool
+          && request.resource.data.lastSeen == request.time
+          && validExpiry(request.resource.data, 7);
+      allow delete: if signedIn() && request.auth.uid == uid;
+      allow read: if false;
+    }
+
+    // Detections. Phones can add their own, and read and delete only their
+    // own (to delete their data), so other phones' activity stays private.
     match /triggers/{id} {
       allow create: if signedIn()
           && request.resource.data.keys().hasOnly([
               'uid', 'clientTime', 'serverTime', 'lat', 'lng', 'cell',
-              'peak', 'ratio', 'freq', 'sustained', 'noise', 'test'])
+              'peak', 'ratio', 'freq', 'sustained', 'noise', 'test', 'expireAt'])
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.clientTime is timestamp
           && request.resource.data.serverTime == request.time
@@ -40,8 +53,10 @@ service cloud.firestore {
           && request.resource.data.freq is number
           && request.resource.data.sustained is number
           && request.resource.data.noise is number
-          && request.resource.data.test is bool;
-      allow read, update, delete: if false;
+          && request.resource.data.test is bool
+          && validExpiry(request.resource.data, 30);
+      allow read, delete: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update: if false;
     }
 
     // Confirmed tremors, written by the Cloud Function.
